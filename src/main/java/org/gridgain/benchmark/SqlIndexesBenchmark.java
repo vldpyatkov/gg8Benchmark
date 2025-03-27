@@ -1,8 +1,5 @@
 package org.gridgain.benchmark;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
@@ -42,14 +39,14 @@ import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 @State(Scope.Benchmark)
-@Fork(value = 1, jvmArgsPrepend = {"-Xmx4g"})
+@Fork(value = 1/*, jvmArgsPrepend = {"-Xmx4g"}*/)
 @Threads(32)
 @Warmup(iterations = 10, time = 2)
 @Measurement(iterations = 20, time = 2)
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
 @SuppressWarnings({"WeakerAccess", "unused"})
-public class SqlIndexesBenchmark {
+public class SqlIndexesBenchmark extends BaseBenchmark {
     private static final AtomicInteger COUNTER = new AtomicInteger();
 
     private static final ThreadLocal<Integer> GEN = ThreadLocal.withInitial(() -> COUNTER.getAndIncrement() * 20_000_000);
@@ -109,14 +106,15 @@ public class SqlIndexesBenchmark {
             .setLocalHost("127.0.0.1")
             .setWorkDirectory(workDir().toAbsolutePath().toString())
             .setDataStorageConfiguration(new DataStorageConfiguration()
+                .setWalSegmentSize(1024 * 1024 * 1024)
                 .setDefaultDataRegionConfiguration(new DataRegionConfiguration()
                     .setPersistenceEnabled(true)
-                    .setMaxSize(5368709120L)))
+                    .setMaxSize(maxMemorySize())))
             .setCacheConfiguration(new CacheConfiguration(CACHE_NAME)
                 .setQueryEntities(Collections.singleton(queryEntity))
                 .setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL))
             .setPluginConfigurations(new GridGainConfiguration()
-                .setLicenseUrl("C:\\ignite2\\gridgain\\ggprivate\\gridgain-license.xml"));
+                .setLicenseUrl(licenseUrl()));
 
         ignite = Ignition.start(ops);
 
@@ -226,10 +224,5 @@ public class SqlIndexesBenchmark {
             .build();
 
         new Runner(opt).run();
-    }
-
-    protected Path workDir() throws Exception {
-        return Paths.get("D:", "Ignite2tmpDirPrefix" + ThreadLocalRandom.current().nextInt());
-//        return Files.createTempDirectory("Ignite2tmpDirPrefix").toFile().toPath();
     }
 }
