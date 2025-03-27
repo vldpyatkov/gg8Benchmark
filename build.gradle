@@ -1,0 +1,65 @@
+plugins {
+    id 'java'
+    id "me.champeau.jmh" version "0.7.3"
+    id "io.morethan.jmhreport" version "0.9.6"
+}
+
+group = 'org.gridgain.benchmark'
+version = 'gg8-benchmark-1.0-SNAPSHOT'
+
+ext {
+    addOpens = [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.math=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.time=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.x509=ALL-UNNAMED",
+    ]
+
+    defaultJvmArgs = addOpens + [
+        "-Dio.netty.tryReflectionSetAccessible=true",
+        "-XX:+HeapDumpOnOutOfMemoryError",
+        "-ea",
+        "-Xmx4g"
+    ]
+}
+
+repositories {
+    mavenCentral()
+
+    maven {
+        url = uri("https://www.gridgainsystems.com/nexus/content/repositories/external")
+    }
+}
+
+dependencies {
+    implementation 'org.openjdk.jmh:jmh-core:1.37'
+    implementation 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+
+    annotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+
+    implementation 'org.gridgain:ignite-core:8.9.9'
+    implementation 'org.gridgain:gridgain-core:8.9.9'
+
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.register("runSqlIndexesBenchmark", JavaExec) {
+    mainClass = "org.gridgain.benchmark.SqlIndexesBenchmark"
+
+    jvmArgs += defaultJvmArgs
+
+    classpath = sourceSets.main.runtimeClasspath
+
+    enableAssertions = true
+}
