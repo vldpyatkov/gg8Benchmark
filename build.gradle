@@ -27,7 +27,7 @@ ext {
         "-Dio.netty.tryReflectionSetAccessible=true",
         "-XX:+HeapDumpOnOutOfMemoryError",
         "-ea",
-        "-Xmx4g"
+        "-Xmx16g"
     ]
 }
 
