@@ -2,7 +2,6 @@ package org.gridgain.benchmark;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ignite.Ignite;
@@ -40,7 +39,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 @State(Scope.Benchmark)
 @Fork(value = 1/*, jvmArgsPrepend = {"-Xmx4g"}*/)
-@Threads(32)
+@Threads(16)
 @Warmup(iterations = 10, time = 2)
 @Measurement(iterations = 20, time = 2)
 @BenchmarkMode(Mode.Throughput)
@@ -51,16 +50,16 @@ public class SqlIndexesBenchmark extends BaseBenchmark {
 
     private static final ThreadLocal<Integer> GEN = ThreadLocal.withInitial(() -> COUNTER.getAndIncrement() * 20_000_000);
 
-    private static final String STR10 = "qwertyuiop";
-    private static final String STR100 = "qwertyuiopqwertyuiopqwertyuiopqwertyuiopqwertyuiop"
-        + "qwertyuiopqwertyuiopqwertyuiopqwertyuiopqwertyuiop";
     public static final String CACHE_NAME = "cache";
 
-    @Param({"0", "2", "4", "8", "10"})
+    @Param({"0", "10"})
     private int idxes;
 
-    @Param({/*"INT",*/ "STR10", "STR100"})
-    private String idxType;
+    @Param({"100"})
+    private int fieldLength;
+
+    @Param({"uniquePrefix", "uniquePostfix"})
+    private String fieldValueGeneration;
 
     private IgniteCache<Integer, BinaryObject> cache;
 
@@ -71,31 +70,16 @@ public class SqlIndexesBenchmark extends BaseBenchmark {
      */
     @Setup
     public void setUp() throws Exception {
-        QueryEntity queryEntity = "INT".equals(idxType) ? queryForIntIndexes() : queryForStringIndexes();
+        QueryEntity queryEntity = queryForStringIndexes();
 
         ArrayList<QueryIndex> indices = new ArrayList<>();
 
-        switch (idxes) {
-            case 10:
-                indices.add(new QueryIndex("val9"));
-            case 9:
-                indices.add(new QueryIndex("val8"));
-            case 8:
-                indices.add(new QueryIndex("val7"));
-            case 7:
-                indices.add(new QueryIndex("val6"));
-            case 6:
-                indices.add(new QueryIndex("val5"));
-            case 5:
-                indices.add(new QueryIndex("val4"));
-            case 4:
-                indices.add(new QueryIndex("val3"));
-            case 3:
-                indices.add(new QueryIndex("val2"));
-            case 2:
-                indices.add(new QueryIndex("val1"));
-            case 1:
-                indices.add(new QueryIndex("val"));
+        if (idxes > 10) {
+            throw new IllegalStateException("Unexpected value of idxes: " + idxes);
+        }
+
+        for (int i = 1; i <= idxes; i++) {
+            indices.add(new QueryIndex("field" + i));
         }
 
         queryEntity.setIndexes(indices);
@@ -123,86 +107,55 @@ public class SqlIndexesBenchmark extends BaseBenchmark {
         cache = ignite.cache(CACHE_NAME);
     }
 
-    private static QueryEntity queryForIntIndexes() {
-        QueryEntity queryEntity = new QueryEntity();
-        queryEntity.setTableName("test");
-        queryEntity.setKeyType(Integer.class.getName());
-        queryEntity.setValueType("test_val");
-        queryEntity.addQueryField("val", Integer.class.getName(), null);
-        queryEntity.addQueryField("val1", Integer.class.getName(), null);
-        queryEntity.addQueryField("val2", Integer.class.getName(), null);
-        queryEntity.addQueryField("val3", Integer.class.getName(), null);
-        queryEntity.addQueryField("val4", Integer.class.getName(), null);
-        queryEntity.addQueryField("val5", Integer.class.getName(), null);
-        queryEntity.addQueryField("val6", Integer.class.getName(), null);
-        queryEntity.addQueryField("val7", Integer.class.getName(), null);
-        queryEntity.addQueryField("val8", Integer.class.getName(), null);
-        queryEntity.addQueryField("val9", Integer.class.getName(), null);
-
-        return queryEntity;
-    }
-
     private static QueryEntity queryForStringIndexes() {
         QueryEntity queryEntity = new QueryEntity();
         queryEntity.setTableName("test");
         queryEntity.setKeyType(Integer.class.getName());
-        queryEntity.setValueType("test_val");
-        queryEntity.addQueryField("val", String.class.getName(), null);
-        queryEntity.addQueryField("val1", String.class.getName(), null);
-        queryEntity.addQueryField("val2", String.class.getName(), null);
-        queryEntity.addQueryField("val3", String.class.getName(), null);
-        queryEntity.addQueryField("val4", String.class.getName(), null);
-        queryEntity.addQueryField("val5", String.class.getName(), null);
-        queryEntity.addQueryField("val6", String.class.getName(), null);
-        queryEntity.addQueryField("val7", String.class.getName(), null);
-        queryEntity.addQueryField("val8", String.class.getName(), null);
-        queryEntity.addQueryField("val9", String.class.getName(), null);
+        queryEntity.setValueType("ycsb_key");
+        queryEntity.addQueryField("field1", String.class.getName(), null);
+        queryEntity.addQueryField("field2", String.class.getName(), null);
+        queryEntity.addQueryField("field3", String.class.getName(), null);
+        queryEntity.addQueryField("field4", String.class.getName(), null);
+        queryEntity.addQueryField("field5", String.class.getName(), null);
+        queryEntity.addQueryField("field6", String.class.getName(), null);
+        queryEntity.addQueryField("field7", String.class.getName(), null);
+        queryEntity.addQueryField("field8", String.class.getName(), null);
+        queryEntity.addQueryField("field9", String.class.getName(), null);
+        queryEntity.addQueryField("field10", String.class.getName(), null);
 
         return queryEntity;
     }
 
+    private BinaryObject valueTuple(int id) {
+        String formattedString = String.format("%" + (fieldValueGeneration.equals("uniquePrefix") ? '-' : '0') + fieldLength + "d", id);
+
+        String fieldVal = formattedString.length() > fieldLength ? formattedString.substring(0, fieldLength) : formattedString;
+
+        return ignite.binary().builder("ycsb_key")
+            .setField("field1", fieldVal)
+            .setField("field2", fieldVal)
+            .setField("field3", fieldVal)
+            .setField("field4", fieldVal)
+            .setField("field5", fieldVal)
+            .setField("field6", fieldVal)
+            .setField("field7", fieldVal)
+            .setField("field8", fieldVal)
+            .setField("field9", fieldVal)
+            .setField("field10", fieldVal)
+            .build();
+    }
+
     @Benchmark
     public void put(Blackhole bh) {
-        int val = ThreadLocalRandom.current().nextInt(0, 1_500_000);
+        int id = nextId();
 
-        cache.put(nextId(), ignite.binary().builder("test_val")
-            .setField("val", getVal(val))
-            .setField("val1", getVal(val))
-            .setField("val2", getVal(val))
-            .setField("val3", getVal(val))
-            .setField("val4", getVal(val))
-            .setField("val5", getVal(val))
-            .setField("val6", getVal(val))
-            .setField("val7", getVal(val))
-            .setField("val8", getVal(val))
-            .setField("val9", getVal(val))
-            .build()
-        );
+        cache.put(id, valueTuple(id));
     }
 
     private int nextId() {
         int cur = GEN.get() + 1;
         GEN.set(cur);
         return cur;
-    }
-
-    private Object getVal(int val) {
-        switch (idxType) {
-            case "INT":
-                return val;
-            case "STR10": {
-                String str = STR10 + val;
-
-                return str.substring(str.length() - STR10.length());
-            }
-            case "STR100": {
-                String str = STR100 + val;
-
-                return str.substring(str.length() - STR100.length());
-            }
-            default:
-                throw new IllegalArgumentException("Unsupported index type: " + idxType);
-        }
     }
 
     /**
