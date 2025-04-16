@@ -63,3 +63,13 @@ tasks.register("runSqlIndexesBenchmark", JavaExec) {
 
     enableAssertions = true
 }
+
+tasks.register("runClientKvBenchmark", JavaExec) {
+    mainClass = "org.gridgain.benchmark.ClientKvBenchmark"
+
+    jvmArgs += defaultJvmArgs
+
+    classpath = sourceSets.main.runtimeClasspath
+
+    enableAssertions = true
+}
