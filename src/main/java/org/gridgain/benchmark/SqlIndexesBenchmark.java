@@ -2,6 +2,7 @@ package org.gridgain.benchmark;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ignite.Ignite;
@@ -15,8 +16,12 @@ import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.DataRegionConfiguration;
 import org.apache.ignite.configuration.DataStorageConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
+import org.apache.ignite.lang.IgniteFuture;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
+import org.apache.ignite.transactions.Transaction;
+import org.apache.ignite.transactions.TransactionConcurrency;
+import org.apache.ignite.transactions.TransactionIsolation;
 import org.gridgain.grid.configuration.GridGainConfiguration;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -52,14 +57,20 @@ public class SqlIndexesBenchmark extends BaseBenchmark {
 
     public static final String CACHE_NAME = "cache";
 
-    @Param({"0", "10"})
+    @Param({"1", "10"})
+    private int batch;
+
+    @Param({"0"/*, "10"*/})
     private int idxes;
 
     @Param({"100"})
     private int fieldLength;
 
-    @Param({"uniquePrefix", "uniquePostfix"})
+    @Param({"uniquePrefix"/*, "uniquePostfix"*/})
     private String fieldValueGeneration;
+
+    @Param({/*"false",*/ "true"})
+    private boolean withTx;
 
     private IgniteCache<Integer, BinaryObject> cache;
 
@@ -147,9 +158,28 @@ public class SqlIndexesBenchmark extends BaseBenchmark {
 
     @Benchmark
     public void put(Blackhole bh) {
+        Transaction tx = withTx ? ignite.transactions().txStart(TransactionConcurrency.PESSIMISTIC, TransactionIsolation.READ_COMMITTED) : null;
+
+        List<IgniteFuture<Void>> futs = new ArrayList<>();
+
+        for (int i = 0; i < batch - 1; i++) {
+            int id = nextId();
+
+            IgniteFuture<Void> fut = cache.putAsync(id, valueTuple(id));
+            futs.add(fut);
+        }
+
+        for (IgniteFuture<Void> fut : futs) {
+            fut.get();
+        }
+
         int id = nextId();
 
         cache.put(id, valueTuple(id));
+
+        if (withTx) {
+            tx.commit();
+        }
     }
 
     private int nextId() {

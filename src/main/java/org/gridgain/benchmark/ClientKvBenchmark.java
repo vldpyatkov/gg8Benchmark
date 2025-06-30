@@ -2,6 +2,7 @@ package org.gridgain.benchmark;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ignite.Ignite;
@@ -15,8 +16,13 @@ import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.DataRegionConfiguration;
 import org.apache.ignite.configuration.DataStorageConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
+import org.apache.ignite.lang.IgniteFuture;
+import org.apache.ignite.spi.communication.tcp.TcpCommunicationSpi;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
+import org.apache.ignite.transactions.Transaction;
+import org.apache.ignite.transactions.TransactionConcurrency;
+import org.apache.ignite.transactions.TransactionIsolation;
 import org.gridgain.grid.configuration.GridGainConfiguration;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -51,14 +57,20 @@ public class ClientKvBenchmark extends BaseBenchmark {
 
     public static final String CACHE_NAME = "cache";
 
-    @Param({"0", "10"})
+    @Param({"1", "10"})
+    private int batch;
+
+    @Param({"0"/*, "10"*/})
     private int idxes;
 
     @Param({"100"})
     private int fieldLength;
 
-    @Param({"uniquePrefix", "uniquePostfix"})
+    @Param({"uniquePrefix"/*, "uniquePostfix"*/})
     private String fieldValueGeneration;
+
+    @Param({/*"false",*/ "true"})
+    private boolean withTx;
 
     private IgniteCache<Integer, BinaryObject> cache;
     private IgniteCache<Integer, BinaryObject> clientCache;
@@ -112,8 +124,9 @@ public class ClientKvBenchmark extends BaseBenchmark {
         cache = ignite.cache(CACHE_NAME);
 
         client = Ignition.start(new IgniteConfiguration()
-                .setIgniteInstanceName("client")
-                .setClientMode(true)
+            .setIgniteInstanceName("client")
+            .setClientMode(true)
+                .setCommunicationSpi(new TcpCommunicationSpi())
             .setDiscoverySpi(new TcpDiscoverySpi()
                 .setLocalPort(47501)
                 .setLocalPortRange(1)
@@ -123,7 +136,7 @@ public class ClientKvBenchmark extends BaseBenchmark {
             .setPluginConfigurations(new GridGainConfiguration()
                 .setLicenseUrl(licenseUrl())));
 
-        clientCache = ignite.cache(CACHE_NAME);
+        clientCache = client.cache(CACHE_NAME);
     }
 
     private static QueryEntity queryForStringIndexes() {
@@ -166,9 +179,28 @@ public class ClientKvBenchmark extends BaseBenchmark {
 
     @Benchmark
     public void put(Blackhole bh) {
+        Transaction tx = withTx ? client.transactions().txStart(TransactionConcurrency.PESSIMISTIC, TransactionIsolation.READ_COMMITTED) : null;
+
+        List<IgniteFuture<Void>> futs = new ArrayList<>();
+
+        for (int i = 0; i < batch - 1; i++) {
+            int id = nextId();
+
+            IgniteFuture<Void> fut = clientCache.putAsync(id, valueTuple(id));
+            futs.add(fut);
+        }
+
+        for (IgniteFuture<Void> fut : futs) {
+            fut.get();
+        }
+
         int id = nextId();
 
         clientCache.put(id, valueTuple(id));
+
+        if (withTx) {
+            tx.commit();
+        }
     }
 
     private int nextId() {
